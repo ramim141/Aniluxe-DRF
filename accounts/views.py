@@ -72,10 +72,10 @@ def activate(request, uid64, token):
     if user is not None and default_token_generator.check_token(user, token):
         user.is_active = True
         user.save()
-        return redirect("https://fashion-fair-frontend.vercel.app/login.html") 
+        return redirect("https://aniluxe-frontend.vercel.app/login.html") 
     else:
         return redirect(
-            "https://fashion-fair-frontend.vercel.app/signup.html"
+            "https://aniluxe-frontend.vercel.app/signup.html"
         )
 
 
