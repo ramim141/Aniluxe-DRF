@@ -1,59 +1,59 @@
-from django.db.models import fields
+# serializers.py
 from rest_framework import serializers
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth.models import User
 from .models import *
-from accounts.serializers import *
+
+
+class SizeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Size
+        fields = '__all__'
+class ColorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Color
+        fields = '__all__'
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = '__all__'
+
+
+class ProductSerializer(serializers.ModelSerializer):
+    category = CategorySerializer(read_only=True)
+    reviews = serializers.StringRelatedField(many=True, read_only=True)
+
+    class Meta:
+        model = Product
+        fields = '__all__'
 
 
 class ReviewSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+
     class Meta:
         model = Review
         fields = '__all__'
 
-class ProductSerializer(serializers.ModelSerializer):
-    reviews = serializers.SerializerMethodField(read_only= True)
+
+class CartSerializer(serializers.ModelSerializer):
+    product = ProductSerializer(read_only=True)
+
     class Meta:
-        model = Product 
+        model = Cart
         fields = '__all__'
 
-    def get_reviews(self,obj):
-        reviews = obj.review_set.all()
-        serializer = ReviewSerializer(reviews,many=True)
-        return serializer.data
 
-class ShippingAddressSerializer(serializers.ModelSerializer):
+class WishlistSerializer(serializers.ModelSerializer):
+    product = ProductSerializer(read_only=True)
+
     class Meta:
-        model = ShippingAddress
+        model = Wishlist
         fields = '__all__'
 
-class OrderItemSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = OrderItem
-        fields = '__all__'
 
 class OrderSerializer(serializers.ModelSerializer):
-    orderItems = serializers.SerializerMethodField(read_only=True)
-    shippingAddress = serializers.SerializerMethodField(read_only=True)
-    User = serializers.SerializerMethodField(read_only=True)
+    product = ProductSerializer(read_only=True)
 
     class Meta:
         model = Order
         fields = '__all__'
-
-    def get_orderItems(self,obj):
-        items = obj.orderitem_set.all()
-        serializer = OrderItemSerializer(items,many=True)
-        return serializer.data
-
-    def get_shippingAddress(self,obj):
-        try:
-            address = ShippingAddressSerializer(obj.shippingaddress,many=False).data
-        except:
-            address = False
-        return address
-
-    def get_User(self,obj):
-        items = obj.user
-        serializer = UserSerializer(items,many=False)
-        return serializer.data

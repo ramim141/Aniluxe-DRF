@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'accounts',
     'store',
+    
 ]
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -104,7 +105,7 @@ ROOT_URLCONF = 'aniluxe.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': ['templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -124,12 +125,12 @@ WSGI_APPLICATION = 'aniluxe.wsgi.application'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default='postgresql://aniluxe_db_user:eqYEVMFme05dgeBZvt1532vTdPEiUzMb@dpg-crap99q3esus73aabna0-a.oregon-postgres.render.com/aniluxe_db',
-        conn_max_age=600,
-        ssl_require=True  # This ensures SSL is required
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
 }
+
 
 REST_AUTH_TOKEN_MODEL = 'knox.models.AuthToken'
 REST_AUTH_TOKEN_CREATOR = 'project.apps.accounts.utils.create_knox_token'
@@ -222,3 +223,5 @@ EMAIL_HOST_USER = env("MAIL_USER")
 EMAIL_HOST_PASSWORD = env("MAIL_PASSWORD")
 
 PASSWORD_RESET_TIMEOUT = 14440
+
+

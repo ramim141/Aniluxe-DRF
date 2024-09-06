@@ -1,11 +1,30 @@
-from django.urls import path
-from .import  views
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
+from .views import (
+    ChangePasswordView,
+    UserAccountViewSet,
+    UserLoginAPIView,
+    UserLogoutAPIView,
+    UserRegistrationAPIView,
+    UserUpdateView,
+    UserViewSet,
+    activate,
+)
 
+router = DefaultRouter()
+router.register("list", UserViewSet)
+router.register("accounts", UserAccountViewSet)
 urlpatterns = [
-    path('register/',views.registerUser,name='register'),
-    path('profile/',views.getUserProfile,name="user_profile"),
-    path('profile/update/',views.updateUserProfile,name="user_profile_update"),
-    path('login/', views.MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('delete/<str:pk>/',views.deleteUser,name="deleteUser"),
+    path("", include(router.urls)),
+    path("register/", UserRegistrationAPIView.as_view(), name="register"),
+    path("login/", UserLoginAPIView.as_view(), name="login"),
+    path("edit_profile/<int:pk>/", UserUpdateView.as_view(), name="edit_profile"),
+    path("logout/", UserLogoutAPIView.as_view(), name="logout"),
+    path("activate/<uid64>/<token>/", activate, name="activate"),
+    path(
+        "change_password/",
+        ChangePasswordView.as_view(),
+        name="change_pass",
+    ),
 ]

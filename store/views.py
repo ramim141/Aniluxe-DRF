@@ -1,111 +1,152 @@
-# Django Import
-from django.core import paginator
-from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-
-# Rest Framework Import
-from rest_framework.decorators import api_view, permission_classes  
-
-# Django Import
-from django.core.exceptions import RequestDataTooBig
-from django.shortcuts import render
-from datetime import datetime
-
 from rest_framework import status
-
-# Rest Framework Import
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.serializers import Serializer
-
-
-# Local Import
-# from base.products import products
-from .serializers import ProductSerializer, OrderSerializer
-# Local Import
-# from api.products import products
 from .models import *
 from .serializers import *
 
-
-
-# Get all the products with query
+# List all categories
 @api_view(['GET'])
-def getProducts(request):
-    query = request.query_params.get('keyword')
-    if query == None:
-        query = ''
+def get_categories(request):
+    categories = Category.objects.all()
+    serializer = CategorySerializer(categories, many=True)
+    return Response(serializer.data)
 
-    products = Product.objects.filter(name__icontains=query).order_by('-_id')
-    page = request.query_params.get('page')
-    if page is None or page.strip() == '':
-        page = 1
-    else:
-        try:
-            page = int(page)
-        except ValueError:
-            page = 1
-    paginator = Paginator(products, 8)
-       
+# List products with filtering and sorting
+@api_view(['GET'])
+def get_products(request):
+    products = Product.objects.all()
+
+    # Filtering by category
+    category = request.query_params.get('category')
+    if category:
+        products = products.filter(category__name=category)
+    
+    # Filtering by color
+    color = request.query_params.get('color')
+    if color:
+        products = products.filter(colors__contains=color)  # Changed from icontains to contains
+
+    # Sorting by price, popularity, and rating
+    sort_by = request.query_params.get('sort_by')
+    if sort_by == 'price':
+        products = products.order_by('price')
+    elif sort_by == 'price_desc':
+        products = products.order_by('-price')
+    elif sort_by == 'popularity':
+        products = products.order_by('-rating')
+    elif sort_by == 'rating':
+        products = products.order_by('-rating')
+
+    serializer = ProductSerializer(products, many=True)
+    return Response(serializer.data)
+
+# Get a specific product
+@api_view(['GET'])
+def get_product(request, pk):
     try:
-        products = paginator.page(page)
-    except PageNotAnInteger:
-        products = paginator.page(1)
-    except EmptyPage:
-        products = paginator.page(paginator.num_pages)
+        product = Product.objects.get(id=pk)
+        serializer = ProductSerializer(product, many=False)
+        return Response(serializer.data)
+    except Product.DoesNotExist:
+        return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
 
-    if page == None:
-        page = 1
-    page = int(page)
-
-    serializer = ProductSerializer(products, many=True)
-    return Response({'products': serializer.data, 'page': page, 'pages': paginator.num_pages})
-
-
-
-# Top Products
-@api_view(['GET'])
-def getTopProducts(request):
-    products = Product.objects.filter(rating__gte=4).order_by('-rating')[0:5]
-    serializer = ProductSerializer(products, many=True)
-    return Response(serializer.data)
-
-
-# Get single products
-@api_view(['GET'])
-def getProduct(request, pk):
-    product = Product.objects.get(_id=pk)
-    serializer = ProductSerializer(product, many=False)
-    return Response(serializer.data)
-
-
+# Add or update cart item
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def createProductReview(request, pk):
-    user = request.user
-    product = Product.objects.get(_id=pk)
+def add_to_cart(request):
     data = request.data
+    user = request.user
+    try:
+        product = Product.objects.get(id=data['product_id'])
+    except Product.DoesNotExist:
+        return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    cart_item, created = Cart.objects.get_or_create(
+        user=user,
+        product=product,
+        size=data['size'],
+        color=data['color'],
+        defaults={'quantity': data.get('quantity', 1)}
+    )
     
-    # 1 Review already exists
-    alreadyExists = product.review_set.filter(user=user).exists()
+    if not created:
+        cart_item.quantity += data.get('quantity', 1)
+        cart_item.save()
 
-    if alreadyExists:
+    serializer = CartSerializer(cart_item, many=False)
+    return Response(serializer.data)
+
+# Add item to wishlist
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_to_wishlist(request):
+    data = request.data
+    user = request.user
+    try:
+        product = Product.objects.get(id=data['product_id'])
+    except Product.DoesNotExist:
+        return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    wishlist_item, created = Wishlist.objects.get_or_create(user=user, product=product)
+    serializer = WishlistSerializer(wishlist_item, many=False)
+    return Response(serializer.data)
+
+# Place an order
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def place_order(request):
+    data = request.data
+    user = request.user
+    try:
+        product = Product.objects.get(id=data['product_id'])
+    except Product.DoesNotExist:
+        return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    order = Order.objects.create(
+        user=user,
+        product=product,
+        address=data['address'],
+        quantity=data['quantity']
+    )
+    serializer = OrderSerializer(order, many=False)
+    return Response(serializer.data)
+
+# Add a review
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_review(request):
+    data = request.data
+    user = request.user
+
+    try:
+        product = Product.objects.get(id=data['product_id'])
+    except Product.DoesNotExist:
+        return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check if the user has already reviewed the product
+    # review_exists = Review.objects.filter(user=user, product=product).exists()
+    review_exists = product.review_set.filter(user=user).exists()
+
+    if review_exists:
         content = {'detail': 'Product already reviewed'}
+        # return Response({"detail": "You have already reviewed this product."}, status=status.HTTP_400_BAD_REQUEST)
         return Response(content, status=status.HTTP_400_BAD_REQUEST)
-
-    # 2 No Rating or 0
     elif data['rating'] == 0:
         content = {'detail': 'Please Select a rating'}
         return Response(content, status=status.HTTP_400_BAD_REQUEST)
-
-    # 3 Create review
     else:
+
+    # Create the new review
         review = Review.objects.create(
             user=user,
             product=product,
-            name=user.first_name,
+            # rating=data.get('rating', 0),
             rating=data['rating'],
+            # comment=data.get('comment', '')
             comment=data['comment'],
         )
+        
         reviews = product.review_set.all()
         product.numReviews = len(reviews)
 
@@ -116,97 +157,40 @@ def createProductReview(request, pk):
         product.rating = total / len(reviews)
         product.save()
         return Response('Review Added')
+    
+        # Recalculate the product's average rating and total reviews count
+        # reviews = product.reviews.all()
+        # product.numReviews = reviews.count()
+        # product.rating = reviews.aggregate(avg_rating=models.Avg('rating'))['avg_rating']
+        # product.save()
+
+        # serializer = ReviewSerializer(review, many=False)
+        # return Response(serializer.data)
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def addOrderItems(request):
-    user = request.user
-    data = request.data
-    print(data)
-    orderItems = data['orderItems']
-
-    if orderItems and len(orderItems) == 0:
-        return Response({'detail': 'No Order Items', "status": status.HTTP_400_BAD_REQUEST})
-    else:
-        # (1) Create Order
-        order = Order.objects.create(
-            user=user,
-            paymentMethod=data['paymentMethod'],
-            taxPrice=data['taxPrice'],
-            shippingPrice=data['shippingPrice'],
-            totalPrice=data['totalPrice'],
-        )
-
-        # (2) Create Shipping Address
-
-        shipping = ShippingAddress.objects.create(
-            order=order,
-            address=data['shippingAddress']['address'],
-            city=data['shippingAddress']['city'],
-            postalCode=data['shippingAddress']['postalCode'],
-            country=data['shippingAddress']['country'],
-        )
-
-        # (3) Create order items
-
-        for i in orderItems:
-            # product = Product.objects.get(_id=i['product'])
-            product = Product.objects.get(_id=i['_id'])
-
-            item = OrderItem.objects.create(
-                product=product,
-                order=order,
-                name=product.name,
-                qty=i['qty'],
-                price=i['price'],
-                image=product.image.url,
-            )
-
-            # (4) Update Stock
-                        # product.countInStock -= int(item["qty"]  # Convert item["qty"] to an integer
-
-            product.countInStock -= int(item.qty)
-            product.save()
-
-        serializer = OrderSerializer(order, many=False)
-        return Response(serializer.data)
-
-
+# Get cart items for the authenticated user
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def getMyOrders(request):
+def get_cart(request):
     user = request.user
-    orders = user.order_set.all()
-    serializer = OrderSerializer(orders, many=True)
+    cart_items = Cart.objects.filter(user=user)
+    serializer = CartSerializer(cart_items, many=True)
     return Response(serializer.data)
 
-
- 
-
+# Get wishlist items for the authenticated user
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def getOrderById(request, pk):
-
+def get_wishlist(request):
     user = request.user
+    wishlist_items = Wishlist.objects.filter(user=user)
+    serializer = WishlistSerializer(wishlist_items, many=True)
+    return Response(serializer.data)
 
-    try:
-        order = Order.objects.get(_id=pk)
-        if   order.user == user:
-            serializer = OrderSerializer(order, many=False)
-            return Response(serializer.data)
-        else:
-            Response({'detail': 'Not Authorized  to view this order'},
-                     status=status.HTTP_400_BAD_REQUEST)
-    except:
-        return Response({'detail': 'Order does not exist'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['PUT'])
+# Get orders for the authenticated user
+@api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def updateOrderToPaid(request, pk):
-    order = Order.objects.get(_id=pk)
-    order.isPaid = True
-    order.paidAt = datetime.now()
-    order.save()
-    return Response('Order was paid', status=status.HTTP_200_OK)
+def get_orders(request):
+    user = request.user
+    orders = Order.objects.filter(user=user)
+    serializer = OrderSerializer(orders, many=True)
+    return Response(serializer.data)

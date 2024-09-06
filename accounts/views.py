@@ -1,113 +1,122 @@
-# Django Import 
-from django.shortcuts import render
-from django.http import JsonResponse
+from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.models import User
-from django.contrib.auth.hashers import make_password
-from rest_framework import status
-
-# Rest Framework Import
-from rest_framework.decorators import api_view,permission_classes
-from rest_framework.permissions import IsAuthenticated 
+from django.contrib.auth.tokens import default_token_generator
+from django.contrib.sites.shortcuts import get_current_site
+from django.core.mail import EmailMultiAlternatives
+from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from rest_framework import status, viewsets
+from rest_framework.authentication import authenticate
+from rest_framework.authtoken.models import Token
+from rest_framework.generics import UpdateAPIView
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.serializers import Serializer
+from rest_framework.views import APIView
 
-# Rest Framework JWT 
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView
-
-# Local Import 
-from .models import *
-from .serializers import UserSerializer,UserSerializerWithToken
-
-
-
-
-
-# JWT Views
-class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
-    def validate(self, attrs):
-        data = super().validate(attrs)
-       
-        serializer = UserSerializerWithToken(self.user).data
-
-        for k,v in serializer.items():
-            data[k] =v
-
-        return data
-    @classmethod
-    def get_token(cls, user):
-        token = super().get_token(user)
-
-        # Add custom claims
-        token['username'] = user.username
-        token['message'] = "Hello Proshop"
-        # ...
-
-        return token
-
-class MyTokenObtainPairView(TokenObtainPairView):
-    serializer_class = MyTokenObtainPairSerializer
+from .models import UserAccount
+from .serializers import (
+    ChangePasswordSerializer,
+    LoginSerializer,
+    UserAccountSerializer,
+    UserRegistrationSerializer,
+    UserSerializer,
+    UserUpdateSerializer,
+)
 
 
-# SHOP API
-@api_view(['GET'])
-def getRoutes(request):
-    routes =[
-        '/api/products/',
-        '/api/products/<id>',
-        '/api/users',
-        '/api/users/register',
-        '/api/users/login',
-        '/api/users/profile',
-    ]
-    return Response(routes)
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
 
 
-@api_view(['POST'])
-def registerUser(request):
-    data = request.data
+class UserAccountViewSet(viewsets.ModelViewSet):
+    queryset = UserAccount.objects.all()
+    serializer_class = UserAccountSerializer
+
+
+class UserRegistrationAPIView(APIView):
+    serializer_class = UserRegistrationSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+
+        if serializer.is_valid():
+            user = serializer.save()
+            # print(user)
+            token = default_token_generator.make_token(user)
+            print("Token: " + str(token))
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            print("UID: " + str(uid))
+            domain = get_current_site(self.request).domain
+            confirm_link = f"https://{domain}/user/activate/{uid}/{token}"
+            email_subject = "Confirm Your Account"
+            email_body = render_to_string(
+                "accounts/confirmation_mail.html", {"confirm_link": confirm_link}
+            )
+            email = EmailMultiAlternatives(email_subject, "", to=[user.email])
+            email.attach_alternative(email_body, "text/html")
+            email.send()
+            return Response("Check Your Mail For Confirmation")
+        return Response(serializer.errors)
+
+
+def activate(request, uid64, token):
     try:
-        user = User.objects.create(
-            first_name = data['name'],
-            username = data['email'],
-            password = make_password(data['password']),
+        uid = urlsafe_base64_decode(uid64).decode()
+        user = User._default_manager.get(pk=uid)
+    except User.DoesNotExist:
+        user = None
+
+    if user is not None and default_token_generator.check_token(user, token):
+        user.is_active = True
+        user.save()
+        return redirect("https://fashion-fair-frontend.vercel.app/login.html") 
+    else:
+        return redirect(
+            "https://fashion-fair-frontend.vercel.app/signup.html"
         )
 
-        serializer = UserSerializerWithToken(user,many=False)
-        return Response(serializer.data)
-    
-    except:
-        message = {"detail":"User with this email is already registered"}
-        return Response(message,status=status.HTTP_400_BAD_REQUEST)
+
+class UserLoginAPIView(APIView):
+    def post(self, request):
+        serializer = LoginSerializer(data=self.request.data)
+        if serializer.is_valid():
+            username = serializer.validated_data["username"]
+            password = serializer.validated_data["password"]
+
+            user = authenticate(username=username, password=password)
+            if user:
+                token, _ = Token.objects.get_or_create(user=user)
+                login(request, user)
+                return Response({"token": token.key, "user_id": user.id})
+            else:
+                return Response({"error": "Invalid Credential"})
+        return Response(serializer.errors)
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def getUserProfile(request):
-    user =request.user 
-    serializer = UserSerializer(user,many = False)
-    return Response(serializer.data)
+class UserUpdateView(UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserUpdateSerializer
 
 
-@api_view(['PUT'])
-@permission_classes([IsAuthenticated])
-def updateUserProfile(request):
-    user =request.user 
-    serializer = UserSerializerWithToken(user,many = False)
-    data = request.data
-    user.first_name = data['name']
-    user.username = data['email']
-    user.email = data['email']
-    if data['password'] !="":
-        user.password= make_password(data['password'])
-    user.save()
-    return Response(serializer.data)
+class ChangePasswordView(APIView):
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Password changed successfully"}, status=status.HTTP_200_OK
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
- 
 
- 
-@api_view(['DELETE'])
-def deleteUser(request,pk):
-    userForDeletion = User.objects.get(id=pk)
-    userForDeletion.delete()
-    return Response("User was deleted")
+class UserLogoutAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if hasattr(request.user, "auth_token") and request.user.auth_token:
+            request.user.auth_token.delete()
+        logout(request)
+        return redirect("login")

@@ -1,5 +1,5 @@
 """
-URL configuration for aniluxe project.
+URL configuration for fluffypaw project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/5.0/topics/http/urls/
@@ -14,14 +14,28 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+# from rest_framework.routers import DefaultRouter
+
+# from .views import UserViewSet
+
+# Create a router and register our ViewSets with it.
+# router = DefaultRouter()
+# router.register("users", UserViewSet)
+
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/users/', include('accounts.urls')),
-    path('api/store/', include('store.urls')),
+    # path("", include(router.urls)),
+    path("admin/", admin.site.urls),
+    path("user/", include("accounts.urls")),
+    path("store/", include("store.urls")),
+ 
+    
+    
 ]
+
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

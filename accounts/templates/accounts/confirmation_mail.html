@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verify Your Account</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-white font-sans text-sm text-gray-800">
+    <table class="p-8 max-w-lg w-full bg-white mx-auto">
+        <tbody>
+            <tr>
+                <td>
+                    <h1 class="text-center text-lg font-bold">Verify Your Account</h1>
+                    <p class="mt-4">
+                        Your request to create an account was submitted. If you did not
+                        make this request, simply ignore this email. If you did make this
+                        request, just click the button below:
+                    </p>
+
+                    <table class="max-w-lg w-full mt-6 text-center">
+                        <tbody>
+                            <tr>
+                                <td class="py-2"></td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <a href="{{ confirm_link }}" class="bg-blue-300 text-black text-base font-semibold rounded-md inline-block w-80 h-11 leading-11 text-center no-underline" target="_blank">
+                                        Activate Account
+                                    </a>
+                                    <br />
+                                    <p class="mt-4">
+                                        If the above link doesn't work, try copying and pasting
+                                        the link below into your browser. If you continue to
+                                        experience problems, please contact us.
+                                    </p>
+                                    <p class="mt-2 text-gray-600">
+                                        {{ confirm_link }}
+                                    </p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+
+</html>
